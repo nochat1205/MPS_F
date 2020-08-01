@@ -28,6 +28,31 @@ def unfold2(tensor, mode=(0, 1)):
     return tensor
 
 
+def tensorToMPS(tensor, sval_nums=999999):
+    """
+    use Tensor_Train
+
+    mind:
+    SVD = I1r1 r1I...
+    r1 I2....->r1I2 I2i3..->r1I2r2 r2...
+    """
+    mps = []
+    M = np.array([tensor])
+    for i in range(tensor.ndim-1):
+        M = unfold2(M)
+        D = min(sval_nums, M.shape[0], M.shape[1])
+        U, Sigma, VT = np.linalg.svd(M, 0)
+        # mps.append(U[:, :D].reshape(-1, tensor[i], D))
+        mps.append(np.reshape(U[:, :D], (-1, tensor.shape[i], D)))
+
+        SVT = np.diag(Sigma[:D]).dot(VT[:D])
+        a = [D]
+        a.extend(tensor.shape[i+1:])
+        M = SVT.reshape(tuple(a))
+    mps.append(M.reshape(D, -1, 1))
+    return mps
+
+
 def random_MPS(d, D: int):
     """
     d: list or int
@@ -63,7 +88,7 @@ def low_MPSnew(MPS0, sval_nums: int):
         U, Sigma, VT = np.linalg.svd(C, 0)
         temp = mps[i].shape[0]
         D = min(sval_nums, C.shape[0], C.shape[1])
-        mps[i] = tl.fold(tl.moveaxis(U[:, :D], 1, 0), 2, (temp, -1, D))
+        mps[i] = U[:, :D].reshape(temp, -1, D)
         SVT = np.tensordot(np.diag(Sigma[0:D]), VT[:D], 1)
 
         mps[i+1] = np.reshape(SVT, (D, -1, mps[i+1].shape[2]))
